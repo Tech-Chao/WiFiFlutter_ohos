@@ -3,6 +3,22 @@
     {
       "name": "page_show",
       "value": "page from package"
+    },
+    {
+      "name": "set_wifi",
+      "value": "设置Wi-Fi"
+    },
+    {
+      "name": "get_wifi",
+      "value": "获取Wi-Fi信息"
+    },
+    {
+      "name": "get_location",
+      "value": "获取位置权限"
+    },
+    {
+      "name": "get_approximately_location",
+      "value": "获取大概位置"
     }
   ]
 }

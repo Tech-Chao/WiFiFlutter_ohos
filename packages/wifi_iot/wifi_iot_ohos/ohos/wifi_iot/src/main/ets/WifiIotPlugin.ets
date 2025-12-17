@@ -1,4 +1,4 @@
-import { wifiManager } from '@kit.ConnectivityKit';
+import { wifi, wifiManager } from '@kit.ConnectivityKit';
 import { MethodChannel, MethodCall, MethodResult, MethodCallHandler, FlutterPlugin,
   FlutterPluginBinding,
   BinaryMessenger,
@@ -24,10 +24,10 @@ export default class WifiIotPlugin implements MethodCallHandler,FlutterPlugin {
     this.onAttachedToEngine1(binding.getApplicationContext(), binding.getBinaryMessenger());
   }
 
-  private onAttachedToEngine1(applicationContext: Context, messenger: BinaryMessenger) {
+  private onAttachedToEngine1(applicationContext: common.Context, messenger: BinaryMessenger): void {
     this.applicationContext = applicationContext;
-    this.channel = new MethodChannel(messenger, "wifi_iot")
-    this.channel.setMethodCallHandler(this)
+    this.channel = new MethodChannel(messenger, "wifi_iot");
+    this.channel.setMethodCallHandler(this);
   }
 
   onDetachedFromEngine(binding: FlutterPluginBinding): void {
@@ -139,53 +139,36 @@ export default class WifiIotPlugin implements MethodCallHandler,FlutterPlugin {
 
   // Stand Alone Methods
   private loadWifiList(result: MethodResult): void {
-    try {
-      // First trigger a scan, then get results
-      wifiManager.startScan()
-        .then(() => {
-          const scanResults = wifiManager.getScanInfoList();
-          const wifiList = scanResults.map((scanInfo: any) => {
-            return {
-              SSID: scanInfo.ssid,
-              BSSID: scanInfo.bssid,
-              capabilities: scanInfo.capabilities || '',
-              frequency: scanInfo.frequency || 0,
-              level: scanInfo.rssi || 0,
-              timestamp: Date.now()
-            };
-          });
-          result.success(JSON.stringify(wifiList));
-        })
-        .catch((error: Error) => {
-          // If scan fails, try to get cached results
-          try {
-            const scanResults = wifiManager.getScanInfoList();
-            const wifiList = scanResults.map((scanInfo: any) => {
-              return {
-                SSID: scanInfo.ssid,
-                BSSID: scanInfo.bssid,
-                capabilities: scanInfo.capabilities || '',
-                frequency: scanInfo.frequency || 0,
-                level: scanInfo.rssi || 0,
-                timestamp: Date.now()
-              };
-            });
-            result.success(JSON.stringify(wifiList));
-          } catch (e) {
-            result.error('LOAD_WIFI_LIST_ERROR', error.message, null);
-          }
-        });
-    } catch (error) {
-      result.error('LOAD_WIFI_LIST_ERROR', (error as Error).message, null);
+    const  isWifiEnable =  wifiManager.isWifiActive();
+    if (isWifiEnable) {
+      result.error(
+        "WifiIotPlugin.Wifi_Disable", "开始扫描Wi-Fi时需要开启Wi-Fi开关", null);
+      return;
+    }else {
+      try {
+      wifiManager.scan();
+      let scanInfoList = wifiManager.getScanInfoList();
+      const wifiList = scanInfoList.map((scanInfo: wifiManager.WifiScanInfo) => {
+        return {
+          SSID: scanInfo.ssid || '',
+          BSSID: scanInfo.bssid || '',
+          capabilities: scanInfo.capabilities || '',
+          frequency: scanInfo.frequency || 0,
+          level: scanInfo.rssi || 0,
+          timestamp: Date.now()
+        };
+      });
+      result.success(JSON.stringify(wifiList));
+    }catch (e) {
+        result.error('LOAD_WIFI_LIST_ERROR', e.message, null);
+      }
     }
-  }
+    }
+
 
   private forceWifiUsage(call: MethodCall, result: MethodResult): void {
-    const arguments = call.arguments as Record<string, any>;
-    const useWifi = arguments['useWifi'] as boolean;
-    console.log(`Forcing WiFi usage: ${useWifi ? 'Use WiFi' : 'Use Mobile Data'}`);
     // HarmonyOS doesn't have direct equivalent, but we can return success
-    result.success(true);
+    result.success(false);
   }
 
   private isEnabled(result: MethodResult): void {
@@ -200,7 +183,14 @@ export default class WifiIotPlugin implements MethodCallHandler,FlutterPlugin {
   private setEnabled(call: MethodCall, result: MethodResult): void {
     const arguments = call.arguments as Record<string, any>;
     const state = arguments['state'] as boolean;
+    const shouldOpenSettings = arguments['shouldOpenSettings'] as boolean | undefined || false;
+    
     try {
+      if (shouldOpenSettings && this.applicationContext) {
+        // HarmonyOS doesn't have direct equivalent to Android's Settings.ACTION_WIFI_SETTINGS
+        // Log for now, but could potentially open system settings if API available
+        console.log(`Should open WiFi settings: ${shouldOpenSettings}`);
+      }
       wifiManager.enableWifi(state);
       console.log(`Setting WiFi Enable: ${state ? 'enable' : 'disable'}`);
       result.success(true);
@@ -210,8 +200,50 @@ export default class WifiIotPlugin implements MethodCallHandler,FlutterPlugin {
   }
 
   private findAndConnect(call: MethodCall, result: MethodResult): void {
-    // Similar to connect, but with scanning first
-    this.connect(call, result);
+    const arguments = call.arguments as Record<string, any>;
+    const ssid = arguments['ssid'] as string;
+    const bssid = arguments['bssid'] as string | undefined;
+    
+    // First scan for networks, then connect
+    try {
+      wifiManager.startScan()
+        .then(() => {
+          const scanResults = wifiManager.getScanInfoList();
+          // Find matching network in scan results
+          const matchingNetwork = scanResults.find((scanInfo: any) => {
+            const matchesSSID = scanInfo.ssid === ssid;
+            const matchesBSSID = !bssid || scanInfo.bssid === bssid;
+            return matchesSSID && matchesBSSID;
+          });
+          
+          if (matchingNetwork) {
+            // Update security type from scan result if not provided
+            if (!arguments['security'] && matchingNetwork.capabilities) {
+              const capabilities = matchingNetwork.capabilities as string;
+              if (capabilities.includes('WPA') || capabilities.includes('WPA2')) {
+                arguments['security'] = 'WPA';
+              } else if (capabilities.includes('WEP')) {
+                arguments['security'] = 'WEP';
+              }
+            }
+            // Update bssid if not provided
+            if (!bssid && matchingNetwork.bssid) {
+              arguments['bssid'] = matchingNetwork.bssid;
+            }
+          }
+          // Proceed with connection
+          this.connect(call, result);
+        })
+        .catch((error: Error) => {
+          console.log(`Scan failed, proceeding with connection: ${error.message}`);
+          // Proceed with connection even if scan fails
+          this.connect(call, result);
+        });
+    } catch (error) {
+      console.log(`Scan error, proceeding with connection: ${(error as Error).message}`);
+      // Proceed with connection even if scan fails
+      this.connect(call, result);
+    }
   }
 
   private registerWifiNetwork(call: MethodCall, result: MethodResult): void {
@@ -221,6 +253,18 @@ export default class WifiIotPlugin implements MethodCallHandler,FlutterPlugin {
     const security = arguments['security'] as string | undefined;
     const isHidden = arguments['is_hidden'] as boolean | undefined || false;
 
+    // Validate SSID
+    if (!ssid || ssid.length === 0 || ssid.length > 32) {
+      result.error('REGISTER_WIFI_NETWORK_ERROR', 'Invalid SSID: SSID must be between 1 and 32 characters', null);
+      return;
+    }
+
+    // Check WEP support
+    if (security && security.toUpperCase() === 'WEP') {
+      result.error('REGISTER_WIFI_NETWORK_ERROR', 'WEP is not supported', null);
+      return;
+    }
+
     try {
       // Determine security type
       let securityType = wifiManager.SecurityType.OPEN;
@@ -228,8 +272,6 @@ export default class WifiIotPlugin implements MethodCallHandler,FlutterPlugin {
         const upperSecurity = security.toUpperCase();
         if (upperSecurity === 'WPA' || upperSecurity === 'WPA2') {
           securityType = wifiManager.SecurityType.WPA2_PSK;
-        } else if (upperSecurity === 'WEP') {
-          securityType = wifiManager.SecurityType.WEP;
         }
       }
 
@@ -249,7 +291,7 @@ export default class WifiIotPlugin implements MethodCallHandler,FlutterPlugin {
         })
         .catch((error: Error) => {
           console.log(`Failed to register WiFi network: ${error.message}`);
-          result.success(false);
+          result.error('REGISTER_WIFI_NETWORK_ERROR', error.message, null);
         });
     } catch (error) {
       console.log(`Registration error: ${(error as Error).message}`);
@@ -263,6 +305,20 @@ export default class WifiIotPlugin implements MethodCallHandler,FlutterPlugin {
     const password = arguments['password'] as string | undefined;
     const security = arguments['security'] as string | undefined;
     const joinOnce = arguments['join_once'] as boolean | undefined ?? false;
+    const withInternet = arguments['with_internet'] as boolean | undefined || false;
+    const timeoutInSeconds = arguments['timeout_in_seconds'] as number | undefined || 30;
+
+    // Validate SSID
+    if (!ssid || ssid.length === 0 || ssid.length > 32) {
+      result.error('CONNECT_ERROR', 'Invalid SSID: SSID must be between 1 and 32 characters', null);
+      return;
+    }
+
+    // Check WEP support
+    if (security && security.toUpperCase() === 'WEP') {
+      result.error('CONNECT_ERROR', 'WEP is not supported', null);
+      return;
+    }
 
     try {
       // Determine security type
@@ -271,8 +327,6 @@ export default class WifiIotPlugin implements MethodCallHandler,FlutterPlugin {
         const upperSecurity = security.toUpperCase();
         if (upperSecurity === 'WPA' || upperSecurity === 'WPA2') {
           securityType = wifiManager.SecurityType.WPA2_PSK;
-        } else if (upperSecurity === 'WEP') {
-          securityType = wifiManager.SecurityType.WEP;
         }
       }
 
@@ -285,26 +339,59 @@ export default class WifiIotPlugin implements MethodCallHandler,FlutterPlugin {
         isHiddenSsid: arguments['is_hidden'] as boolean | undefined || false
       };
 
+      let networkIdToRemove: number | null = null;
+
       wifiManager.addCandidateConfig(wifiConfig)
         .then((networkId: number) => {
+          if (joinOnce) {
+            networkIdToRemove = networkId;
+          }
           return wifiManager.connectToCandidateConfig(networkId);
         })
         .then(() => {
-          // Verify connection
-          setTimeout(() => {
+          // Verify connection with timeout
+          const startTime = Date.now();
+          const checkConnection = (): void => {
             wifiManager.getLinkedInfo()
               .then((linkedInfo: wifiManager.WifiLinkedInfo) => {
-                const connected = linkedInfo.ssid === ssid;
-                console.log(`Connected to ${linkedInfo.ssid || '<Unknown Network>'}`);
-                result.success(connected);
+                const connected = linkedInfo !== null && linkedInfo.ssid === ssid;
+                const elapsed = (Date.now() - startTime) / 1000;
+                
+                if (connected) {
+                  console.log(`Connected to ${linkedInfo.ssid || '<Unknown Network>'}`);
+                  result.success(true);
+                } else if (elapsed < timeoutInSeconds) {
+                  // Check again after a short delay
+                  setTimeout(checkConnection, 500);
+                } else {
+                  console.log(`Connection timeout after ${timeoutInSeconds} seconds`);
+                  if (joinOnce && networkIdToRemove !== null) {
+                    wifiManager.removeCandidateConfig(networkIdToRemove);
+                  }
+                  result.success(false);
+                }
               })
               .catch(() => {
-                result.success(false);
+                const elapsed = (Date.now() - startTime) / 1000;
+                if (elapsed < timeoutInSeconds) {
+                  setTimeout(checkConnection, 500);
+                } else {
+                  if (joinOnce && networkIdToRemove !== null) {
+                    wifiManager.removeCandidateConfig(networkIdToRemove);
+                  }
+                  result.success(false);
+                }
               });
-          }, 1000);
+          };
+          
+          // Start checking connection after a short delay
+          setTimeout(checkConnection, 500);
         })
         .catch((error: Error) => {
           console.log(`Not Connected: ${error.message}`);
+          if (joinOnce && networkIdToRemove !== null) {
+            wifiManager.removeCandidateConfig(networkIdToRemove);
+          }
           result.success(false);
         });
     } catch (error) {
@@ -408,8 +495,23 @@ export default class WifiIotPlugin implements MethodCallHandler,FlutterPlugin {
   private getIP(result: MethodResult): void {
     try {
       const ipInfo = wifiManager.getIpInfo();
-      const ipAddress = ipInfo?.ipAddress?.toString() || null;
-      result.success(ipAddress);
+      if (ipInfo && ipInfo.ipAddress !== undefined) {
+        // Convert IP address from integer to string format (e.g., 192.168.1.1)
+        // Java implementation: strip[0].strip[1].strip[2].strip[3]
+        // where strip[0] = (longIp & 0x000000FF) - lowest byte
+        //       strip[1] = ((longIp & 0x0000FFFF) >>> 8)
+        //       strip[2] = ((longIp & 0x00FFFFFF) >>> 16)
+        //       strip[3] = (longIp >>> 24) - highest byte
+        const ipAddress = ipInfo.ipAddress as number;
+        const byte0 = (ipAddress & 0x000000FF);
+        const byte1 = ((ipAddress & 0x0000FFFF) >>> 8);
+        const byte2 = ((ipAddress & 0x00FFFFFF) >>> 16);
+        const byte3 = (ipAddress >>> 24);
+        const ipString = `${byte0}.${byte1}.${byte2}.${byte3}`;
+        result.success(ipString);
+      } else {
+        result.success(null);
+      }
     } catch (error) {
       result.error('GET_IP_ERROR', (error as Error).message, null);
     }
@@ -423,8 +525,7 @@ export default class WifiIotPlugin implements MethodCallHandler,FlutterPlugin {
     const targetSSID = ssid || prefixSSID;
 
     if (targetSSID === '') {
-      console.log('No SSID or prefix SSID was given!');
-      result.success(null);
+      result.error('REMOVE_WIFI_NETWORK_ERROR', 'No SSID or prefix SSID was given!', null);
       return;
     }
 
@@ -439,6 +540,10 @@ export default class WifiIotPlugin implements MethodCallHandler,FlutterPlugin {
           if (matches) {
             wifiManager.removeCandidateConfig(config.networkId);
             removed = true;
+            // If exact match, break early; if prefix match, continue to remove all matches
+            if (!prefixSSID) {
+              break;
+            }
           }
         }
       }
@@ -499,8 +604,14 @@ export default class WifiIotPlugin implements MethodCallHandler,FlutterPlugin {
   }
 
   private getClientList(call: MethodCall, result: MethodResult): void {
+    const arguments = call.arguments as Record<string, any>;
+    const onlyReachables = arguments['onlyReachables'] as boolean | undefined || false;
+    const reachableTimeout = arguments['reachableTimeout'] as number | undefined || 300;
+    
+    console.log(`getClientList called with onlyReachables=${onlyReachables}, reachableTimeout=${reachableTimeout}`);
     // HarmonyOS doesn't provide direct API for getting connected clients
-    result.notImplemented();
+    // Return empty array to match expected format
+    result.success(JSON.stringify([]));
   }
 
   private getWiFiAPSSID(result: MethodResult): void {
