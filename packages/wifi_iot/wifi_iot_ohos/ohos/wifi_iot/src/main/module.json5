@@ -1,0 +1,51 @@
+{
+  "module": {
+    "name": "wifi_iot",
+    "type": "har",
+    "deviceTypes": [
+      "default"
+    ],
+    "requestPermissions": [
+      {
+        "name": "ohos.permission.GET_WIFI_INFO",
+        "reason": "需要获取WiFi信息",
+        "usedScene": {
+          "abilities": [],
+          "when": "inuse"
+        }
+      },
+      {
+        "name": "ohos.permission.SET_WIFI_INFO",
+        "reason": "需要设置WiFi信息",
+        "usedScene": {
+          "abilities": [],
+          "when": "inuse"
+        }
+      },
+      {
+        "name": "ohos.permission.GET_WIFI_LOCAL_MAC",
+        "reason": "需要获取WiFi MAC地址",
+        "usedScene": {
+          "abilities": [],
+          "when": "inuse"
+        }
+      },
+      {
+        "name": "ohos.permission.SET_WIFI_CONFIG",
+        "reason": "需要配置WiFi",
+        "usedScene": {
+          "abilities": [],
+          "when": "inuse"
+        }
+      },
+      {
+        "name": "ohos.permission.MANAGE_WIFI_HOTSPOT",
+        "reason": "需要管理WiFi热点",
+        "usedScene": {
+          "abilities": [],
+          "when": "inuse"
+        }
+      }
+    ]
+  }
+}
