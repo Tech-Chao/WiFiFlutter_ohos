@@ -24,6 +24,12 @@
 
       "name": "manager_enterprise_wifi_connect",
       "value": "获取企业账号设置Wi-Fi能力"
+    },
+    {
+
+      "name": "manage_wifi_hotspot_ext",
+      "value": "管理Wi-Fi热点能力"
     }
+
   ]
 }

@@ -5,7 +5,6 @@
     "deviceTypes": [
       "default"
     ],
-
     "requestPermissions": [
       {
         "name": "ohos.permission.SET_WIFI_INFO",
@@ -21,13 +20,16 @@
       },
       {
         "name": "ohos.permission.APPROXIMATELY_LOCATION",
-        "reason":"$string:get_approximately_location"
+        "reason": "$string:get_approximately_location"
       },
       {
         "name": "ohos.permission.MANAGE_ENTERPRISE_WIFI_CONNECTION",
         "reason": "$string:manager_enterprise_wifi_connect"
+      },
+      {
+        "name": "ohos.permission.MANAGE_WIFI_HOTSPOT",
+        "reason": "$string:manage_wifi_hotspot_ext",
       }
-
     ]
   }
 }
