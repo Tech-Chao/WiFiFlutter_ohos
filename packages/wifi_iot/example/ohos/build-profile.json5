@@ -7,11 +7,11 @@
         "material": {
           "certpath": "/Users/admin/.ohos/config/default_ohos_uYK1XDUa-zJtaCh8mlS7LC4xZCik-k0Wv97-pEzH6QI=.cer",
           "keyAlias": "debugKey",
-          "keyPassword": "0000001B61F9E42A3A651DECD2B833D3BDFAB70345544137CC73642914B94DB9C5B5E1BD2489D5F9F32696",
+          "keyPassword": "0000001B1F651009CE06FE3404D04856357249B280F3098ADA14C627E06DA165B4FBB18ACFD7FD6E646652",
           "profile": "/Users/admin/.ohos/config/default_ohos_uYK1XDUa-zJtaCh8mlS7LC4xZCik-k0Wv97-pEzH6QI=.p7b",
           "signAlg": "SHA256withECDSA",
           "storeFile": "/Users/admin/.ohos/config/default_ohos_uYK1XDUa-zJtaCh8mlS7LC4xZCik-k0Wv97-pEzH6QI=.p12",
-          "storePassword": "0000001B36F1B94FC3F682E6FDC09475C9D76F11A7BBA09555AF566447051F6C0A2BE0B2FECEF638649FD0"
+          "storePassword": "0000001BCB9D69D2E63B90B177D12C007A487A39D46DE2FEB93A6CB3290E35C7511EBBC36A140F3DED4EDE"
         }
       }
     ],
@@ -19,9 +19,9 @@
       {
         "name": "default",
         "signingConfig": "default",
-        "compatibleSdkVersion": "5.0.0(12)",
+        "compatibleSdkVersion": "5.0.3(15)",
         "runtimeOS": "HarmonyOS",
-        "targetSdkVersion": "5.0.0(12)"
+        "targetSdkVersion": "5.0.3(15)"
       }
     ],
     "buildModeSet": [

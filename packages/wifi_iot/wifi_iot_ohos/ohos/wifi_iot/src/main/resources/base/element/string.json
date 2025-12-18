@@ -13,6 +13,10 @@
       "value": "获取Wi-Fi信息"
     },
     {
+      "name": "manage_wifi",
+      "value": "管理Wi-Fi"
+    },
+    {
       "name": "get_location",
       "value": "获取位置权限"
     },
@@ -26,10 +30,8 @@
       "value": "获取企业账号设置Wi-Fi能力"
     },
     {
-
       "name": "manage_wifi_hotspot_ext",
       "value": "管理Wi-Fi热点能力"
     }
-
   ]
 }
