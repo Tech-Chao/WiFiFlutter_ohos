@@ -207,7 +207,7 @@ class _FlutterWifiIoTState extends State<FlutterWifiIoT> {
     });
 
     // disable scanning for ios as not supported
-    if (_isConnected || Platform.isIOS) {
+    if (_isConnected || Platform.isIOS ) {
       _htResultNetwork = null;
     }
 

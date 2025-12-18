@@ -263,12 +263,10 @@ export default class WifiIotPlugin implements MethodCallHandler, FlutterPlugin {
   }
 
   private forceWifiUsage(call: MethodCall, result: MethodResult): void {
-    // HarmonyOS 没有直接等价的API，返回true表示成功
-
+    const useWifi = call.argument('useWifi') as boolean;
+    console.log(`${TAG} forceWifiUsage: ${useWifi}`);
+    // 在鸿蒙系统中，网络路由由系统管理，无法直接控制
     result.notImplemented();
-    // const useWifi = call.argument('useWifi') as boolean;
-    // console.log(`${TAG} forceWifiUsage: ${useWifi}`);
-    // // 在鸿蒙系统中，网络路由由系统管理，无法直接控制
     // result.success(args);
   }
 
@@ -283,20 +281,10 @@ export default class WifiIotPlugin implements MethodCallHandler, FlutterPlugin {
   }
 
   private setEnabled(call: MethodCall, result: MethodResult): void {
+    // HarmonyOS 应用无法开启Wi-Fi（只能是系统应用或者企业应用）
     const state = call.argument('state') as boolean;
-
-    try {
-      if (state) {
-        wifiManager.enableWifi();
-      } else {
-        wifiManager.disableWifi();
-      }
-      console.log(`${TAG} setEnabled: ${state ? 'enable' : 'disable'}`);
-      result.success(null);
-    } catch (error) {
-      const err = error as BusinessError;
-      result.error('SET_ENABLED_ERROR', err.message, null);
-    }
+    console.log(`${TAG} setEnabled: ${state ? 'enable' : 'disable'}`);
+    result.notImplemented();
   }
 
   private async findAndConnect(call: MethodCall, result: MethodResult) {
@@ -495,31 +483,24 @@ export default class WifiIotPlugin implements MethodCallHandler, FlutterPlugin {
 
   private isConnected(result: MethodResult): void {
     try {
-      wifiManager.getLinkedInfo()
-        .then((linkedInfo: wifiManager.WifiLinkedInfo) => {
-          const isConnected = linkedInfo !== null &&
-            linkedInfo.ssid !== null &&
-            linkedInfo.ssid !== '' &&
-            linkedInfo.connState === wifiManager.ConnState.CONNECTED;
-          result.success(isConnected);
-        })
-        .catch(() => {
-          result.success(false);
-        });
+      const isConnected = wifiManager.isConnected();
+      result.success(isConnected);
     } catch (error) {
-      result.success(false);
+      result.error('GET_CONNECTED_STATE_ERROR', error.message, null);
     }
   }
 
   private disconnect(result: MethodResult): void {
-    try {
-      wifiManager.disconnect();
-      result.success(true);
-    } catch (error) {
-      const err = error as BusinessError;
-      console.error(`${TAG} Disconnect error: ${err.message}`);
-      result.success(false);
-    }
+    // 鸿蒙普通应用无法申请权限(ohos. permission. MANAGE_WIFI_CONNECTION or ohos. permission. MANAGE_ENTERPRISE_WIFI_CONNECTION)
+    result.notImplemented();
+    // try {
+    //   wifiManager.disconnect();
+    //   result.success(true);
+    // } catch (error) {
+    //   const err = error as BusinessError;
+    //   console.error(`${TAG} Disconnect error: ${err.message}`);
+    //   result.success(false);
+    // }
   }
 
   private getSSID(result: MethodResult): void {
@@ -685,7 +666,6 @@ export default class WifiIotPlugin implements MethodCallHandler, FlutterPlugin {
   private setWiFiAPEnabled(call: MethodCall, result: MethodResult): void {
     result.notImplemented();
     // const state = call.argument('state') as boolean;
-
     // try {
     //   if (canIUse("SystemCapability.Communication.WiFi.AP.Extension")) {
     //     console.info("当前设备支持 Wi-Fi AP 扩展能力");
@@ -832,8 +812,6 @@ export default class WifiIotPlugin implements MethodCallHandler, FlutterPlugin {
   }
 
   private showWritePermissionSettings(call: MethodCall, result: MethodResult): void {
-    // 鸿蒙系统没有直接等价的写入权限设置页面
-    // 返回成功，不做任何操作
     result.notImplemented();
   }
 
