@@ -25,6 +25,8 @@ export default class WifiIotPlugin implements MethodCallHandler, FlutterPlugin {
   private requestingPermission: boolean = false;
   // 需要在退出时移除的网络配置ID列表
   private networkIdsToBeRemovedOnExit: number[] = [];
+  // 维护 ssid -> networkId 的映射，用于移除网络
+  private ssidToNetworkIdMap: Map<string, number> = new Map();
 
   getUniqueClassName(): string {
     return TAG;
@@ -69,6 +71,7 @@ export default class WifiIotPlugin implements MethodCallHandler, FlutterPlugin {
       }
     }
     this.networkIdsToBeRemovedOnExit = [];
+    this.ssidToNetworkIdMap.clear();
   }
 
   // 方法映射
@@ -359,6 +362,7 @@ export default class WifiIotPlugin implements MethodCallHandler, FlutterPlugin {
       wifiManager.addCandidateConfig(wifiConfig)
         .then((networkId: number) => {
           console.log(`${TAG} Registered WiFi network: ${ssid} with networkId: ${networkId}`);
+          this.ssidToNetworkIdMap.set(ssid, networkId);
           result.success(null);
         })
         .catch((error: BusinessError) => {
@@ -419,6 +423,7 @@ export default class WifiIotPlugin implements MethodCallHandler, FlutterPlugin {
 
       wifiManager.addCandidateConfig(wifiConfig)
         .then((networkId: number) => {
+          this.ssidToNetworkIdMap.set(ssid, networkId);
           if (joinOnce) {
             networkIdToRemove = networkId;
             this.networkIdsToBeRemovedOnExit.push(networkId);
@@ -611,13 +616,29 @@ export default class WifiIotPlugin implements MethodCallHandler, FlutterPlugin {
     }
 
     try {
+      // 优先从维护的映射中查找 networkId
+      const networkId = this.ssidToNetworkIdMap.get(ssid);
+      if (networkId !== undefined) {
+        wifiManager.removeCandidateConfig(networkId);
+        this.ssidToNetworkIdMap.delete(ssid);
+        // 从退出时移除列表中也删除
+        const index = this.networkIdsToBeRemovedOnExit.indexOf(networkId);
+        if (index > -1) {
+          this.networkIdsToBeRemovedOnExit.splice(index, 1);
+        }
+        result.success(true);
+        return;
+      }
+
+      // 如果映射中没有，尝试从 getCandidateConfigs 查找（只能移除自己添加的）
       const candidateConfigs = wifiManager.getCandidateConfigs();
       let removed = false;
 
       for (const config of candidateConfigs) {
-        if (config.ssid && config.ssid.startsWith(ssid)) {
-          wifiManager.removeCandidateConfig(config.id);
-          removed = true;
+        if (config.ssid && config.ssid === ssid) {
+          // 注意：getCandidateConfigs 返回的配置可能没有可用的 networkId
+          // 只有通过 addCandidateConfig 返回的 networkId 才能用于移除
+          console.warn(`${TAG} Found config for ${ssid} but networkId not tracked, cannot remove`);
           break;
         }
       }
@@ -632,6 +653,13 @@ export default class WifiIotPlugin implements MethodCallHandler, FlutterPlugin {
     const ssid = call.argument('ssid') as string;
 
     try {
+      // 优先检查维护的映射
+      if (this.ssidToNetworkIdMap.has(ssid)) {
+        result.success(true);
+        return;
+      }
+
+      // 也检查 getCandidateConfigs
       const candidateConfigs = wifiManager.getCandidateConfigs();
       const isRegistered = candidateConfigs.some((config: wifiManager.WifiDeviceConfig) => {
         return config.ssid === ssid;
@@ -644,53 +672,55 @@ export default class WifiIotPlugin implements MethodCallHandler, FlutterPlugin {
 
   // Access Point Methods - 热点相关方法
   // 注意：鸿蒙系统的热点API需要系统应用权限，普通应用可能无法使用
-
   private isWiFiAPEnabled(result: MethodResult): void {
-    try {
-      const isActive = wifiManager.isHotspotActive();
-      result.success(isActive);
-    } catch (error) {
-      result.success(false);
-    }
+    result.notImplemented();
+    // try {
+    //   const isActive = wifiManager.isHotspotActive();
+    //   result.success(isActive);
+    // } catch (error) {
+    //   result.success(false);
+    // }
   }
 
   private setWiFiAPEnabled(call: MethodCall, result: MethodResult): void {
-    const state = call.argument('state') as boolean;
+    result.notImplemented();
+    // const state = call.argument('state') as boolean;
 
-    try {
-      if (canIUse("SystemCapability.Communication.WiFi.AP.Extension")) {
-        console.info("当前设备支持 Wi-Fi AP 扩展能力");
-        if (state) {
-          wifiManagerExt.enableHotspot();
-        } else {
-          wifiManagerExt.disableHotspot();
-        }
-        result.success(true);
-      } else {
-        console.error("");
-        result.error('SET_AP_ENABLE_ERROR', '不支持此能力，请检查配置或设备兼容性', null);
-      }
-    } catch (error) {
-      const err = error as BusinessError;
-      console.error(`${TAG} setWiFiAPEnabled error: ${err.message}`);
-      result.success(false);
-    }
+    // try {
+    //   if (canIUse("SystemCapability.Communication.WiFi.AP.Extension")) {
+    //     console.info("当前设备支持 Wi-Fi AP 扩展能力");
+    //     if (state) {
+    //       wifiManagerExt.enableHotspot();
+    //     } else {
+    //       wifiManagerExt.disableHotspot();
+    //     }
+    //     result.success(true);
+    //   } else {
+    //     console.error("");
+    //     result.error('SET_AP_ENABLE_ERROR', '不支持此能力，请检查配置或设备兼容性', null);
+    //   }
+    // } catch (error) {
+    //   const err = error as BusinessError;
+    //   console.error(`${TAG} setWiFiAPEnabled error: ${err.message}`);
+    //   result.success(false);
+    // }
   }
 
   private getWiFiAPState(result: MethodResult): void {
-    try {
-      const isActive = wifiManager.isHotspotActive();
-      if (isActive) {
-        // WIFI_AP_STATE_ENABLED = 3
-        result.success(3);
-      } else {
-        // WIFI_AP_STATE_DISABLED = 1
-        result.success(1);
-      }
-    } catch (error) {
-      // WIFI_AP_STATE_FAILED = 4
-      result.success(4);
-    }
+    result.notImplemented();
+    // try {
+    //   const isActive = wifiManager.isHotspotActive();
+    //   if (isActive) {
+    //     // WIFI_AP_STATE_ENABLED = 3
+    //     result.success(3);
+    //   } else {
+    //     // WIFI_AP_STATE_DISABLED = 1
+    //     result.success(1);
+    //   }
+    // } catch (error) {
+    //   // WIFI_AP_STATE_FAILED = 4
+    //   result.success(4);
+    // }
   }
 
   private getClientList(call: MethodCall, result: MethodResult): void {

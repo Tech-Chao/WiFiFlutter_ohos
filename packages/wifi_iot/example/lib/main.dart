@@ -255,7 +255,7 @@ class _FlutterWifiIoTState extends State<FlutterWifiIoT> {
                     case "Connect":
                       WiFiForIoTPlugin.connect(STA_DEFAULT_SSID,
                           password: STA_DEFAULT_PASSWORD,
-                          joinOnce: true,
+                          joinOnce: false,
                           security: STA_DEFAULT_SECURITY);
                       break;
                     case "Remove":
@@ -282,11 +282,168 @@ class _FlutterWifiIoTState extends State<FlutterWifiIoT> {
           child: Column(
             children: Platform.isIOS
                 ? getButtonWidgetsForiOS()
-                : getButtonWidgetsForAndroid(),
+                : (Platform.isOhos
+                    ? getButtonWidgetsForOhos()
+                    : getButtonWidgetsForAndroid()),
           ),
         ),
       );
     }
+  }
+
+  List<Widget> getButtonWidgetsForOhos() {
+    final List<Widget> htPrimaryWidgets = <Widget>[];
+
+    WiFiForIoTPlugin.isEnabled().then((val) {
+      setState(() {
+        _isEnabled = val;
+      });
+    });
+
+    if (_isEnabled) {
+      htPrimaryWidgets.addAll([
+        const SizedBox(height: 10),
+        const Text("Wifi Enabled"),
+      ]);
+
+      WiFiForIoTPlugin.isConnected().then((val) {
+        setState(() {
+          _isConnected = val;
+        });
+      });
+
+      if (_isConnected) {
+        htPrimaryWidgets.addAll(<Widget>[
+          const Text("Connected"),
+          FutureBuilder(
+              future: WiFiForIoTPlugin.getSSID(),
+              initialData: "Loading..",
+              builder: (BuildContext context, AsyncSnapshot<String?> ssid) {
+                return Text("SSID: ${ssid.data}");
+              }),
+          FutureBuilder(
+              future: WiFiForIoTPlugin.getBSSID(),
+              initialData: "Loading..",
+              builder: (BuildContext context, AsyncSnapshot<String?> bssid) {
+                return Text("BSSID: ${bssid.data}");
+              }),
+          FutureBuilder(
+              future: WiFiForIoTPlugin.getCurrentSignalStrength(),
+              initialData: 0,
+              builder: (BuildContext context, AsyncSnapshot<int?> signal) {
+                return Text("Signal: ${signal.data}");
+              }),
+          FutureBuilder(
+              future: WiFiForIoTPlugin.getFrequency(),
+              initialData: 0,
+              builder: (BuildContext context, AsyncSnapshot<int?> freq) {
+                return Text("Frequency : ${freq.data}");
+              }),
+          FutureBuilder(
+              future: WiFiForIoTPlugin.getIP(),
+              initialData: "Loading..",
+              builder: (BuildContext context, AsyncSnapshot<String?> ip) {
+                return Text("IP : ${ip.data}");
+              }),
+          MaterialButton(
+            color: Colors.blue,
+            child: Text("Disconnect", style: textStyle),
+            onPressed: () {
+              WiFiForIoTPlugin.disconnect();
+            },
+          ),
+        ]);
+      } else {
+        htPrimaryWidgets.addAll(<Widget>[
+          const Text("Disconnected"),
+          MaterialButton(
+            color: Colors.blue,
+            child: Text("Scan", style: textStyle),
+            onPressed: () async {
+              _htResultNetwork = await loadWifiList();
+              setState(() {});
+            },
+          ),
+          const SizedBox(height: 10),
+          // Manual connect section
+          Text(
+            "Manual Connect",
+            style: textStyle.copyWith(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 6),
+          TextField(
+            controller: _ssidController,
+            decoration: const InputDecoration(
+              labelText: "SSID",
+              hintText: "Enter WiFi SSID",
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _passwordController,
+            obscureText: true,
+            decoration: const InputDecoration(
+              labelText: "Password",
+              hintText: "Enter WiFi password",
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              const Text("Security: "),
+              const SizedBox(width: 8),
+              DropdownButton<NetworkSecurity>(
+                value: _selectedSecurity,
+                onChanged: (NetworkSecurity? value) {
+                  if (value == null) return;
+                  setState(() {
+                    _selectedSecurity = value;
+                  });
+                },
+                items: [NetworkSecurity.WPA, NetworkSecurity.NONE]
+                    .map(
+                      (e) => DropdownMenuItem<NetworkSecurity>(
+                        value: e,
+                        child: Text(e.toString().split('.').last),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          MaterialButton(
+            color: Colors.green,
+            child: Text("Connect", style: textStyle),
+            onPressed: () {
+              final ssid = _ssidController.text.trim();
+              final password = _passwordController.text;
+              if (ssid.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("SSID cannot be empty")),
+                );
+                return;
+              }
+              WiFiForIoTPlugin.connect(
+                ssid,
+                password: password.isEmpty ? null : password,
+                joinOnce: true,
+                security: _selectedSecurity,
+              );
+            },
+          ),
+        ]);
+      }
+    } else {
+      htPrimaryWidgets.addAll(<Widget>[
+        const SizedBox(height: 10),
+        const Text("Wifi Disabled"),
+      ]);
+    }
+
+    return htPrimaryWidgets;
   }
 
   List<Widget> getButtonWidgetsForAndroid() {
@@ -702,14 +859,49 @@ class _FlutterWifiIoTState extends State<FlutterWifiIoT> {
       } else {
         htPrimaryWidgets.addAll(<Widget>[
           Text("Disconnected"),
+          const SizedBox(height: 10),
+          Text(
+            "Manual Connect",
+            style: textStyle.copyWith(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 6),
+          TextField(
+            controller: _ssidController,
+            decoration: const InputDecoration(
+              labelText: "SSID",
+              hintText: "Enter WiFi SSID",
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _passwordController,
+            obscureText: true,
+            decoration: const InputDecoration(
+              labelText: "Password",
+              hintText: "Enter WiFi password",
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 8),
           MaterialButton(
-            color: Colors.blue,
-            child: Text("Connect to '$AP_DEFAULT_SSID'", style: textStyle),
+            color: Colors.green,
+            child: Text("Connect", style: textStyle),
             onPressed: () {
-              WiFiForIoTPlugin.connect(STA_DEFAULT_SSID,
-                  password: STA_DEFAULT_PASSWORD,
-                  joinOnce: true,
-                  security: NetworkSecurity.WPA);
+              final ssid = _ssidController.text.trim();
+              final password = _passwordController.text;
+              if (ssid.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("SSID cannot be empty")),
+                );
+                return;
+              }
+              WiFiForIoTPlugin.connect(
+                ssid,
+                password: password.isEmpty ? null : password,
+                joinOnce: true,
+                security: NetworkSecurity.WPA,
+              );
             },
           ),
         ]);
@@ -717,14 +909,49 @@ class _FlutterWifiIoTState extends State<FlutterWifiIoT> {
     } else {
       htPrimaryWidgets.addAll(<Widget>[
         Text("Wifi Disabled?"),
+        const SizedBox(height: 10),
+        Text(
+          "Manual Connect",
+          style: textStyle.copyWith(fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 6),
+        TextField(
+          controller: _ssidController,
+          decoration: const InputDecoration(
+            labelText: "SSID",
+            hintText: "Enter WiFi SSID",
+            border: OutlineInputBorder(),
+          ),
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _passwordController,
+          obscureText: true,
+          decoration: const InputDecoration(
+            labelText: "Password",
+            hintText: "Enter WiFi password",
+            border: OutlineInputBorder(),
+          ),
+        ),
+        const SizedBox(height: 8),
         MaterialButton(
-          color: Colors.blue,
-          child: Text("Connect to '$AP_DEFAULT_SSID'", style: textStyle),
+          color: Colors.green,
+          child: Text("Connect", style: textStyle),
           onPressed: () {
-            WiFiForIoTPlugin.connect(STA_DEFAULT_SSID,
-                password: STA_DEFAULT_PASSWORD,
-                joinOnce: true,
-                security: NetworkSecurity.WPA);
+            final ssid = _ssidController.text.trim();
+            final password = _passwordController.text;
+            if (ssid.isEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("SSID cannot be empty")),
+              );
+              return;
+            }
+            WiFiForIoTPlugin.connect(
+              ssid,
+              password: password.isEmpty ? null : password,
+              joinOnce: true,
+              security: NetworkSecurity.WPA,
+            );
           },
         ),
       ]);
@@ -735,7 +962,6 @@ class _FlutterWifiIoTState extends State<FlutterWifiIoT> {
 
   @override
   Widget build(BuildContext poContext) {
-    
     final title = Platform.isIOS
         ? "WifiFlutter Example iOS"
         : (Platform.isOhos
