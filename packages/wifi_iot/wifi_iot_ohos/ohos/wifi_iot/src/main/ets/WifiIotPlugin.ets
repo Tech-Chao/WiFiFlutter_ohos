@@ -9,7 +9,17 @@ import {
   BinaryMessenger,
   AbilityPluginBinding,
 } from '@ohos/flutter_ohos'
-import { common, UIAbility } from '@kit.AbilityKit';
+import {
+  abilityAccessCtrl,
+  bundleManager,
+  Permissions,
+  Context,
+  PermissionRequestResult,
+  common,
+  UIAbility
+} from '@kit.AbilityKit';
+import { BusinessError } from '@kit.BasicServicesKit';
+import json from '@ohos.util.json';
 
 
 const TAG: string = "WifiIotPlugin";
@@ -18,6 +28,9 @@ export default class WifiIotPlugin implements MethodCallHandler, FlutterPlugin {
   private channel: MethodChannel | null = null;
   private applicationContext: common.Context | null = null
   private ability: UIAbility | null = null;
+
+  // 是否在请求权限Ï
+  private  requestingPermission:boolean = false;
 
   getUniqueClassName(): string {
     return TAG;
@@ -144,23 +157,76 @@ export default class WifiIotPlugin implements MethodCallHandler, FlutterPlugin {
     }
   }
 
-  // Stand Alone Methods
-  private loadWifiList(result: MethodResult): void {
-    result.notImplemented();
-    // try {
-    //   const isWifiEnable = wifiManager.isWifiActive();
-    //   if (isWifiEnable) {
-    //     result.error(
-    //       "WifiIotPlugin.Wifi_Disable", "开始扫描Wi-Fi时需要开启Wi-Fi开关", null);
-    //     return;
-    //   }
-    //   wifiManager.scan();
-    //   let scanInfoList = wifiManager.getScanInfoList();
-    //   result.success(JSON.stringify(scanInfoList));
-    // } catch (error) {
-    //   // TODO: Implement error handling.
-    //   result.error('LOAD_WIFI_LIST_ERROR', error.message, null);
-    // }
+  // 检查权限是否授权
+  async checkPermissionGrant(permission: Permissions): Promise<abilityAccessCtrl.GrantStatus> {
+    let atManager: abilityAccessCtrl.AtManager = abilityAccessCtrl.createAtManager();
+    let grantStatus: abilityAccessCtrl.GrantStatus = abilityAccessCtrl.GrantStatus.PERMISSION_DENIED;
+
+    // 获取应用程序的accessTokenID。
+    let tokenId: number = 0;
+    try {
+      let bundleInfo: bundleManager.BundleInfo =
+        await bundleManager.getBundleInfoForSelf(bundleManager.BundleFlag.GET_BUNDLE_INFO_WITH_APPLICATION);
+      let appInfo: bundleManager.ApplicationInfo = bundleInfo.appInfo;
+      tokenId = appInfo.accessTokenId;
+    } catch (error) {
+      const err: BusinessError = error as BusinessError;
+      console.error(`Failed to get bundle info for self, code: ${err.code}, message: ${err.message}`);
+    }
+    // 校验应用是否被授予权限。
+    try {
+      grantStatus = await atManager.checkAccessToken(tokenId, permission);
+    } catch (error) {
+      const err: BusinessError = error as BusinessError;
+      console.error(`Failed to check access token, code: ${err.code}, message: ${err.message}`);
+    }
+    return grantStatus;
+  }
+
+
+  // 获取Wi-Fi列表
+  private async loadWifiList(result: MethodResult) {
+    // ohos. permission. SET_WIFI_INFO and ohos. permission. LOCATION and ohos. permission. APPROXIMATELY_LOCATION
+    if(await this.checkPermissionGrant('ohos.permission.GET_WIFI_CONFIG') != abilityAccessCtrl.GrantStatus.PERMISSION_GRANTED) {
+      if (this.requestingPermission) {
+        result.error(
+          "WifiIotPlugin.Permission", "Only one permission can be requested at a time", null);
+        return;
+      }
+      this.requestingPermission = true;
+    }
+
+    try {
+      wifiManager.scan();
+      result.success(json.stringify(this.handleNetworkScanResult()));
+    } catch (error) {
+      // TODO: Implement error handling.
+      result.error('LOAD_WIFI_LIST_ERROR', error.message, null);
+    }
+  }
+
+  // 处理Wi-Fi扫描的结果
+  handleNetworkScanResult(): Array<Record<string, Object>> {
+
+    const scanResults: Array<wifiManager.WifiScanInfo> =  wifiManager.getScanResults();
+    const wifiArray: Array<Record<string, Object>> = [];
+    try {
+      scanResults.forEach((scanInfo: wifiManager.WifiScanInfo) => {
+        if (scanInfo.ssid && scanInfo.ssid.length > 0) {
+          wifiArray.push({
+            "SSID": scanInfo.ssid,
+            "BSSID": scanInfo.bssid,
+            "capabilities": scanInfo.capabilities,
+            "frequency": scanInfo.frequency,
+            "level": scanInfo.rssi,
+            "timestamp": scanInfo.timestamp
+          });
+        }
+      });
+      return wifiArray;
+    } catch (e) {
+      throw e;
+    }
   }
 
   private forceWifiUsage(call: MethodCall, result: MethodResult): void {
@@ -234,10 +300,10 @@ export default class WifiIotPlugin implements MethodCallHandler, FlutterPlugin {
       // Determine security type
       let wifiConfig: wifiManager.WifiDeviceConfig = {
         ssid: ssid,
-        bssid:bssid,
+        bssid: bssid,
         preSharedKey: password,
         securityType: securityType,
-        isHiddenSsid:isHiddenSsid,
+        isHiddenSsid: isHiddenSsid,
       }
       let networkIdToRemove: number | null = null;
       wifiManager.addCandidateConfig(wifiConfig)

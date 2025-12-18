@@ -19,6 +19,11 @@
     {
       "name": "get_approximately_location",
       "value": "获取大概位置"
+    },
+    {
+
+      "name": "manager_enterprise_wifi_connect",
+      "value": "获取企业账号设置Wi-Fi能力"
     }
   ]
 }

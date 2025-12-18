@@ -33,6 +33,13 @@ class _FlutterWifiIoTState extends State<FlutterWifiIoT> {
   bool _isWifiEnableOpenSettings = false;
   bool _isWifiDisableOpenSettings = false;
 
+  // OHOS/Android manual connect controls
+  final TextEditingController _ssidController =
+      TextEditingController(text: STA_DEFAULT_SSID);
+  final TextEditingController _passwordController =
+      TextEditingController(text: STA_DEFAULT_PASSWORD);
+  NetworkSecurity _selectedSecurity = STA_DEFAULT_SECURITY;
+
   final TextStyle textStyle = TextStyle(color: Colors.white);
 
   @override
@@ -52,6 +59,13 @@ class _FlutterWifiIoTState extends State<FlutterWifiIoT> {
     });
 
     super.initState();
+  }
+
+  @override
+  void dispose() {
+    _ssidController.dispose();
+    _passwordController.dispose();
+    super.dispose();
   }
 
   storeAndConnect(String psSSID, String psKey) async {
@@ -367,6 +381,76 @@ class _FlutterWifiIoTState extends State<FlutterWifiIoT> {
               setState(() {});
             },
           ),
+          const SizedBox(height: 10),
+          // Manual connect section (SSID / password / security)
+          Text(
+            "Manual Connect",
+            style: textStyle.copyWith(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 6),
+          TextField(
+            controller: _ssidController,
+            decoration: const InputDecoration(
+              labelText: "SSID",
+              hintText: "Enter WiFi SSID",
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _passwordController,
+            obscureText: true,
+            decoration: const InputDecoration(
+              labelText: "Password",
+              hintText: "Enter WiFi password",
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              const Text("Security: "),
+              const SizedBox(width: 8),
+              DropdownButton<NetworkSecurity>(
+                value: _selectedSecurity,
+                onChanged: (NetworkSecurity? value) {
+                  if (value == null) return;
+                  setState(() {
+                    _selectedSecurity = value;
+                  });
+                },
+                items: NetworkSecurity.values
+                    .map(
+                      (e) => DropdownMenuItem<NetworkSecurity>(
+                        value: e,
+                        child: Text(e.toString().split('.').last),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          MaterialButton(
+            color: Colors.green,
+            child: Text("Connect", style: textStyle),
+            onPressed: () {
+              final ssid = _ssidController.text.trim();
+              final password = _passwordController.text;
+              if (ssid.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("SSID cannot be empty")),
+                );
+                return;
+              }
+              WiFiForIoTPlugin.connect(
+                ssid,
+                password: password.isEmpty ? null : password,
+                joinOnce: true,
+                security: _selectedSecurity,
+              );
+            },
+          ),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: <Widget>[
@@ -651,15 +735,17 @@ class _FlutterWifiIoTState extends State<FlutterWifiIoT> {
 
   @override
   Widget build(BuildContext poContext) {
+    
+    final title = Platform.isIOS
+        ? "WifiFlutter Example iOS"
+        : (Platform.isOhos
+            ? "WifiFlutter Example OHOS"
+            : "WifiFlutter Example Android");
     return MaterialApp(
-      title: Platform.isIOS
-          ? "WifiFlutter Example iOS"
-          : "WifiFlutter Example Android",
+      title: title,
       home: Scaffold(
         appBar: AppBar(
-          title: Platform.isIOS
-              ? Text('WifiFlutter Example iOS')
-              : Text('WifiFlutter Example Android'),
+          title: Text(title),
           actions: _isConnected
               ? <Widget>[
                   PopupMenuButton<String>(
