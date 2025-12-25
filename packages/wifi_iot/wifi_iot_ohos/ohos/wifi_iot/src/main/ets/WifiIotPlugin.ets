@@ -251,12 +251,20 @@ export default class WifiIotPlugin implements MethodCallHandler, FlutterPlugin {
     if (!security) {
       return wifiManager.WifiSecurityType.WIFI_SEC_TYPE_OPEN;
     }
-    switch (security.toUpperCase()) {
+    const securityUpper = security.toUpperCase().trim();
+    switch (securityUpper) {
       case "WPA":
       case "WPA2":
+      case "WPA3":
         return wifiManager.WifiSecurityType.WIFI_SEC_TYPE_PSK;
       case "WEP":
         return wifiManager.WifiSecurityType.WIFI_SEC_TYPE_WEP;
+      case "SAE":
+        return wifiManager.WifiSecurityType.WIFI_SEC_TYPE_SAE;
+      case "EAP":
+        return wifiManager.WifiSecurityType.WIFI_SEC_TYPE_EAP;
+      case "OWE":
+        return wifiManager.WifiSecurityType.WIFI_SEC_TYPE_OWE;
       default:
         return wifiManager.WifiSecurityType.WIFI_SEC_TYPE_OPEN;
     }
@@ -281,7 +289,7 @@ export default class WifiIotPlugin implements MethodCallHandler, FlutterPlugin {
   }
 
   private setEnabled(call: MethodCall, result: MethodResult): void {
-    // HarmonyOS 应用无法开启Wi-Fi（只能是系统应用或者企业应用）
+    // HarmonyOS 应用无法开启Wi-Fi（鸿蒙限制应用类型：只能是系统应用或者企业应用）
     const state = call.argument('state') as boolean;
     console.log(`${TAG} setEnabled: ${state ? 'enable' : 'disable'}`);
     result.notImplemented();
@@ -311,7 +319,7 @@ export default class WifiIotPlugin implements MethodCallHandler, FlutterPlugin {
       }
 
       // 调用连接方法
-      this.connectTo(result, ssid, bssid, password, security, joinOnce, isHidden, timeoutInSeconds);
+      await this.connectTo(result, ssid, bssid, password, security, joinOnce, isHidden, timeoutInSeconds);
     } catch (error) {
       const err = error as BusinessError;
       result.error('FIND_AND_CONNECT_ERROR', err.message, null);
@@ -325,8 +333,9 @@ export default class WifiIotPlugin implements MethodCallHandler, FlutterPlugin {
     const security = call.argument('security') as string | undefined;
     const isHidden = call.argument('is_hidden') as boolean | undefined ?? false;
 
-    // 验证SSID
-    if (!ssid || ssid.length === 0 || ssid.length > 32) {
+    // 验证SSID（根据接口定义：最大长度32）
+    const trimmedSsid = ssid?.trim();
+    if (!trimmedSsid || trimmedSsid.length === 0 || trimmedSsid.length > 32) {
       result.error('REGISTER_ERROR', 'Invalid SSID: SSID must be between 1 and 32 characters', null);
       return;
     }
@@ -340,17 +349,22 @@ export default class WifiIotPlugin implements MethodCallHandler, FlutterPlugin {
     try {
       const securityType = this.mapNetworkSecurityToWifiSecType(security ?? undefined);
       const wifiConfig: wifiManager.WifiDeviceConfig = {
-        ssid: ssid,
-        bssid: bssid ?? '',
+        ssid: trimmedSsid,
         preSharedKey: password ?? '',
         securityType: securityType,
-        isHiddenSsid: isHidden,
       };
+      // 只在有值时才设置可选字段
+      if (bssid && bssid.trim().length > 0) {
+        wifiConfig.bssid = bssid;
+      }
+      if (isHidden) {
+        wifiConfig.isHiddenSsid = isHidden;
+      }
 
       wifiManager.addCandidateConfig(wifiConfig)
         .then((networkId: number) => {
-          console.log(`${TAG} Registered WiFi network: ${ssid} with networkId: ${networkId}`);
-          this.ssidToNetworkIdMap.set(ssid, networkId);
+          console.log(`${TAG} Registered WiFi network: ${trimmedSsid} with networkId: ${networkId}`);
+          this.ssidToNetworkIdMap.set(trimmedSsid, networkId);
           result.success(null);
         })
         .catch((error: BusinessError) => {
@@ -363,19 +377,19 @@ export default class WifiIotPlugin implements MethodCallHandler, FlutterPlugin {
     }
   }
 
-  private connect(call: MethodCall, result: MethodResult): void {
+  private async connect(call: MethodCall, result: MethodResult): Promise<void> {
     const ssid = call.argument('ssid') as string;
     const bssid = call.argument('bssid') as string | undefined;
     const password = call.argument('password') as string | undefined;
     const security = call.argument('security') as string | undefined;
     const joinOnce = call.argument('join_once') as boolean | undefined ?? true;
     const isHidden = call.argument('is_hidden') as boolean | undefined ?? false;
-    const timeoutInSeconds = call.argument('timeout_in_seconds') as number | undefined ?? 30;
+    const timeoutInSeconds = call.argument('timeout_in_seconds') as number | undefined ?? 10;
 
-    this.connectTo(result, ssid, bssid, password, security, joinOnce, isHidden, timeoutInSeconds);
+    await this.connectTo(result, ssid, bssid, password, security, joinOnce, isHidden, timeoutInSeconds);
   }
 
-  private connectTo(
+  private async connectTo(
     result: MethodResult,
     ssid: string,
     bssid: string | undefined,
@@ -384,15 +398,22 @@ export default class WifiIotPlugin implements MethodCallHandler, FlutterPlugin {
     joinOnce: boolean,
     isHidden: boolean,
     timeoutInSeconds: number
-  ): void {
-    // 验证SSID
-    if (!ssid || ssid.length === 0 || ssid.length > 32) {
+  ): Promise<void> {
+    // 验证SSID（根据接口定义：最大长度32）
+    const trimmedSsid = ssid?.trim();
+    if (!trimmedSsid || trimmedSsid.length === 0 || trimmedSsid.length > 32) {
       result.error('CONNECT_ERROR', 'Invalid SSID: SSID must be between 1 and 32 characters', null);
       return;
     }
 
+    // 验证密码长度（根据接口定义：最大长度64）
+    if (password && password.length > 64) {
+      result.error('CONNECT_ERROR', 'Invalid password: Password must be no more than 64 characters', null);
+      return;
+    }
+
     // 检查WEP支持
-    if (security && security.toUpperCase() === 'WEP') {
+    if (security && security.toUpperCase().trim() === 'WEP') {
       result.error('CONNECT_ERROR', 'WEP is not supported', null);
       return;
     }
@@ -400,84 +421,78 @@ export default class WifiIotPlugin implements MethodCallHandler, FlutterPlugin {
     try {
       const securityType = this.mapNetworkSecurityToWifiSecType(security);
       const wifiConfig: wifiManager.WifiDeviceConfig = {
-        ssid: ssid,
-        bssid: bssid ?? '',
+        ssid: trimmedSsid,
         preSharedKey: password ?? '',
         securityType: securityType,
-        isHiddenSsid: isHidden,
       };
+      // 只在有值时才设置可选字段
+      if (bssid && bssid.length > 0) {
+        wifiConfig.bssid = bssid;
+        wifiConfig.bssidType = wifiManager.DeviceAddressType.REAL_DEVICE_ADDRESS;
+      }
+
+      if (isHidden) {
+        wifiConfig.isHiddenSsid = isHidden;
+      }
 
       let networkIdToRemove: number | null = null;
+      const networkId: number = await wifiManager.addCandidateConfig(wifiConfig);
+      this.ssidToNetworkIdMap.set(trimmedSsid, networkId);
 
-      wifiManager.addCandidateConfig(wifiConfig)
-        .then((networkId: number) => {
-          this.ssidToNetworkIdMap.set(ssid, networkId);
-          if (joinOnce) {
-            networkIdToRemove = networkId;
-            this.networkIdsToBeRemovedOnExit.push(networkId);
-          }
-          return wifiManager.connectToCandidateConfig(networkId);
-        })
-        .then(() => {
-          // 验证连接，带超时
-          const startTime = Date.now();
-          const checkConnection = (): void => {
-            wifiManager.getLinkedInfo()
-              .then((linkedInfo: wifiManager.WifiLinkedInfo) => {
-                const connected = linkedInfo !== null && linkedInfo.ssid === ssid;
-                const elapsed = (Date.now() - startTime) / 1000;
+      if (joinOnce) {
+        networkIdToRemove = networkId;
+        this.networkIdsToBeRemovedOnExit.push(networkId);
+      }
 
-                if (connected) {
-                  console.log(`${TAG} Connected to ${linkedInfo.ssid || '<Unknown Network>'}`);
-                  result.success(true);
-                } else if (elapsed < timeoutInSeconds) {
-                  setTimeout(checkConnection, 500);
-                } else {
-                  console.log(`${TAG} Connection timeout after ${timeoutInSeconds} seconds`);
-                  if (joinOnce && networkIdToRemove !== null) {
-                    wifiManager.removeCandidateConfig(networkIdToRemove);
-                    const index = this.networkIdsToBeRemovedOnExit.indexOf(networkIdToRemove);
-                    if (index > -1) {
-                      this.networkIdsToBeRemovedOnExit.splice(index, 1);
-                    }
-                  }
-                  result.success(false);
+      wifiManager.connectToCandidateConfig(networkId);
+
+      // 验证连接，带超时
+      const startTime = Date.now();
+      const checkConnection = (): void => {
+        wifiManager.getLinkedInfo()
+          .then(async (linkedInfo: wifiManager.WifiLinkedInfo) => {
+            const connected = linkedInfo !== null && linkedInfo.ssid === trimmedSsid;
+            const elapsed = (Date.now() - startTime) / 1000;
+
+            if (connected) {
+              console.log(`${TAG} Connected to ${linkedInfo.ssid || '<Unknown Network>'}`);
+              result.success(true);
+            } else if (elapsed < timeoutInSeconds) {
+              setTimeout(checkConnection, 500);
+            } else {
+              console.log(`${TAG} Connection timeout after ${timeoutInSeconds} seconds`);
+              if (joinOnce && networkIdToRemove !== null) {
+                await wifiManager.removeCandidateConfig(networkIdToRemove);
+                const index = this.networkIdsToBeRemovedOnExit.indexOf(networkIdToRemove);
+                if (index > -1) {
+                  this.networkIdsToBeRemovedOnExit.splice(index, 1);
                 }
-              })
-              .catch(() => {
-                const elapsed = (Date.now() - startTime) / 1000;
-                if (elapsed < timeoutInSeconds) {
-                  setTimeout(checkConnection, 500);
-                } else {
-                  if (joinOnce && networkIdToRemove !== null) {
-                    wifiManager.removeCandidateConfig(networkIdToRemove);
-                    const index = this.networkIdsToBeRemovedOnExit.indexOf(networkIdToRemove);
-                    if (index > -1) {
-                      this.networkIdsToBeRemovedOnExit.splice(index, 1);
-                    }
-                  }
-                  result.success(false);
-                }
-              });
-          };
-
-          setTimeout(checkConnection, 500);
-        })
-        .catch((error: BusinessError) => {
-          console.log(`${TAG} Not Connected: ${error.message}`);
-          if (joinOnce && networkIdToRemove !== null) {
-            wifiManager.removeCandidateConfig(networkIdToRemove);
-            const index = this.networkIdsToBeRemovedOnExit.indexOf(networkIdToRemove);
-            if (index > -1) {
-              this.networkIdsToBeRemovedOnExit.splice(index, 1);
+              }
+              result.success(false);
             }
-          }
-          result.success(false);
-        });
+          })
+          .catch(async () => {
+            const elapsed = (Date.now() - startTime) / 1000;
+            if (elapsed < timeoutInSeconds) {
+              setTimeout(checkConnection, 500);
+            } else {
+              if (joinOnce && networkIdToRemove !== null) {
+                await wifiManager.removeCandidateConfig(networkIdToRemove);
+                const index = this.networkIdsToBeRemovedOnExit.indexOf(networkIdToRemove);
+                if (index > -1) {
+                  this.networkIdsToBeRemovedOnExit.splice(index, 1);
+                }
+              }
+              result.success(false);
+            }
+          });
+      };
+
+      setTimeout(checkConnection, 500);
     } catch (error) {
       const err = error as BusinessError;
       console.log(`${TAG} Connection error: ${err.message}`);
-      result.error('CONNECT_ERROR', err.message, null);
+      result.error('CONNECT_ERROR', `Connection failed: ${err.message}`, null);
     }
   }
 
