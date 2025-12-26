@@ -14,6 +14,7 @@ import {
 } from '@kit.AbilityKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import json from '@ohos.util.json';
+import { deviceInfo } from '@kit.BasicServicesKit';
 
 const TAG: string = "WifiIotPlugin";
 
@@ -443,8 +444,11 @@ export default class WifiIotPlugin implements MethodCallHandler, FlutterPlugin {
         networkIdToRemove = networkId;
         this.networkIdsToBeRemovedOnExit.push(networkId);
       }
-
-      wifiManager.connectToCandidateConfig(networkId);
+      if(deviceInfo.distributionOSApiVersion >= 60000){
+        await  wifiManager.connectToCandidateConfigWithUserAction(networkId);
+      }else {
+        wifiManager.connectToCandidateConfig(networkId);
+      }
 
       // 验证连接，带超时
       const startTime = Date.now();
