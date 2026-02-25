@@ -1,4 +1,4 @@
-import { wifiManager, wifiManagerExt } from '@kit.ConnectivityKit';
+import { wifiManager } from '@kit.ConnectivityKit';
 import {
   MethodChannel,
   MethodCall,
@@ -445,7 +445,7 @@ export default class WifiIotPlugin implements MethodCallHandler, FlutterPlugin {
         this.networkIdsToBeRemovedOnExit.push(networkId);
       }
       if(deviceInfo.distributionOSApiVersion >= 60000){
-        await  wifiManager.connectToCandidateConfigWithUserAction(networkId);
+       await  wifiManager.connectToCandidateConfigWithUserAction(networkId);
       }else {
         wifiManager.connectToCandidateConfig(networkId);
       }
