@@ -1,9 +1,23 @@
 {
-  "module": {
-    "name": "wifi_iot",
-    "type": "har",
-    "deviceTypes": [
-      "default"
-    ]
-  }
+  module: {
+    name: "wifi_iot",
+    type: "har",
+    deviceTypes: ["default"],
+    requestPermissions: [
+      {
+        name: "ohos.permission.SET_WIFI_INFO",
+        usedScene: {
+          abilities: ["EntryAbility"],
+          when: "inuse",
+        },
+      },
+      {
+        name: "ohos.permission.GET_WIFI_INFO",
+        usedScene: {
+          abilities: ["EntryAbility"],
+          when: "inuse",
+        },
+      },
+    ],
+  },
 }
