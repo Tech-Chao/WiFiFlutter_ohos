@@ -1,3 +1,3 @@
-import WifiIotPlugin from './src/main/ets/WifiIotPlugin';
+import WifiIotPlugin from './src/main/ets/WifiIotPlugin.ets'
 
-export default  WifiIotPlugin
+export default WifiIotPlugin

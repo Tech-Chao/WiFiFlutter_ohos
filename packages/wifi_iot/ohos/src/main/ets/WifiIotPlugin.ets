@@ -492,7 +492,7 @@ export default class WifiIotPlugin implements MethodCallHandler, FlutterPlugin {
           });
       };
 
-      setTimeout(checkConnection, 500);
+      setTimeout(checkConnection, 1000);
     } catch (error) {
       const err = error as BusinessError;
       console.log(`${TAG} Connection error: ${err.message}`);
